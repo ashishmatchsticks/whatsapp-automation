@@ -2,33 +2,50 @@
 const twilio = require("twilio");
 
 module.exports = async (req, res) => {
-  // Allow only POST
-  if (req.method !== "POST") {
-    res.status(405).json({ success: false, error: "Method not allowed" });
-    return;
-  }
+  // ----- CORS HEADERS -----
+  const allowedOrigin =
+    process.env.ALLOWED_ORIGIN || "https://amty-global.myshopify.com";
 
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", process.env.ALLOWED_ORIGIN);
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+  // Handle preflight
   if (req.method === "OPTIONS") {
     res.status(200).end();
     return;
   }
 
-  try {
-    const { name, email, phone, location, message } = req.body;
+  // Only allow POST
+  if (req.method !== "POST") {
+    res.status(405).json({ success: false, error: "Method not allowed" });
+    return;
+  }
 
-    if (!name || !phone || !location || !message) {
-      res.status(400).json({
-        success: false,
-        error: "Missing required fields"
-      });
+  // ----- PARSE BODY -----
+  let body = req.body;
+
+  // Sometimes Vercel gives body as string
+  if (typeof body === "string") {
+    try {
+      body = JSON.parse(body);
+    } catch (e) {
+      res.status(400).json({ success: false, error: "Invalid JSON" });
       return;
     }
+  }
 
+  const { name, email, phone, location, message } = body || {};
+
+  if (!name || !phone || !location || !message) {
+    res
+      .status(400)
+      .json({ success: false, error: "Missing required fields" });
+    return;
+  }
+
+  try {
     const client = twilio(
       process.env.TWILIO_ACCOUNT_SID,
       process.env.TWILIO_AUTH_TOKEN
@@ -43,14 +60,15 @@ module.exports = async (req, res) => {
         `Email: ${email || "-"}\n` +
         `Phone: ${phone}\n` +
         `Location: ${location}\n` +
-        `Message: ${message}`
+        `Message: ${message}`,
     });
 
-    console.log("WhatsApp message SID:", result.sid);
-
+    console.log("WhatsApp SID:", result.sid);
     res.status(200).json({ success: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: "Internal server error" });
+  } catch (err) {
+    console.error("Twilio error:", err);
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to send WhatsApp message" });
   }
 };
