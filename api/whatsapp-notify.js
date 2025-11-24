@@ -47,13 +47,13 @@ module.exports = async (req, res) => {
 
   try {
     const client = twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
+      process.env.TWILIO_ACCOUNT_SID || "AC4be996a260705c33973db097a7cad745",
+      process.env.TWILIO_AUTH_TOKEN || "815d10d783e5f28cbf18cb74cd4481d0"
     );
 
     const result = await client.messages.create({
-      from: process.env.TWILIO_WHATSAPP_FROM,
-      to: process.env.ADMIN_WHATSAPP_TO,
+      from: process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886",
+      to: process.env.ADMIN_WHATSAPP_TO || "whatsapp:+919904545168",
       body:
         `New enquiry from Shopify:\n` +
         `Name: ${name}\n` +
