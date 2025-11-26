@@ -51,7 +51,7 @@ module.exports = async (req, res) => {
 
   // Two admin numbers
   const DEFAULT_ADMIN = process.env.ADMIN_WHATSAPP_TO;                    // for all cities
-  const MUMBAI_ADMIN  = process.env.MUMBAI_WHATSAPP_TO || DEFAULT_ADMIN;   // fallback if not set
+  const MUMBAI_ADMIN  = process.env.MUMBAI_WHATSAPP_TO || DEFAULT_ADMIN;   // fallback if not sets
 
   // Helpful error if core vars are missing
   if (!accountSid || !authToken || !fromNumber || !DEFAULT_ADMIN) {
