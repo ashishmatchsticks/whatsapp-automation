@@ -77,7 +77,7 @@ module.exports = async (req, res) => {
 
   const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
-  /* ============ SEND WHATSAPP TEMPLATE MESSAGE ============ */
+  /* ============ SEND WHATSAPP TEMPLATE MESSAGE =========== */
   try {
     const result = await client.messages.create({
       from: TWILIO_WHATSAPP_FROM, // e.g. whatsapp:+919106963751
