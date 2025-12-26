@@ -1,5 +1,5 @@
 // api/whatsapp-notify.js
-// Sends admin WhatsApp notification using APPROVED WhatsApp template (admin_lead_alert_v2)
+// Sends admin WhatsApp notification using APPROVED WhatsApp template
 
 const twilio = require("twilio");
 
@@ -48,6 +48,7 @@ module.exports = async (req, res) => {
     name: `'${name}'`,
     phone: `'${phone}'`,
     location: `'${location}'`,
+    preferred_date: `'${preferred_date}'`,
     nameTrimmedLength: name.trim().length,
     phoneTrimmedLength: phone.trim().length,
     locationTrimmedLength: location.trim().length,
@@ -58,13 +59,8 @@ module.exports = async (req, res) => {
     return res.status(400).json({
       success: false,
       error: "Missing required fields",
-      details: "name, phone, and location are required and cannot be empty/blank",
+      details: "name, phone, and location are required",
       received: body,
-      trimmed: {
-        name: name.trim(),
-        phone: phone.trim(),
-        location: location.trim(),
-      },
     });
   }
 
@@ -89,9 +85,9 @@ module.exports = async (req, res) => {
     });
   }
 
-  /* ============ CITY → WHATSAPP NUMBER MAPPING (Hardcoded as requested) ============ */
+  /* ============ CITY → WHATSAPP NUMBER MAPPING ============ */
   const CITY_WHATSAPP_MAP = {
-    MUMBAI:      "whatsapp:+919904545168",
+    MUMBAI:      "whatsapp:+919324088075",
     PUNE:        "whatsapp:+917620577347",
     DELHI:       "whatsapp:+918448654489",
     BANGALORE:   "whatsapp:+918511759373",
@@ -101,55 +97,71 @@ module.exports = async (req, res) => {
     AURANGABAD:  "whatsapp:+919112283522",
     INDORE:      "whatsapp:+918319950609",
     CHENNAI:     "whatsapp:+918511759373",
+    ITANAGAR:    "whatsapp:+919904545168", // fallback or add proper
   };
 
-  // Optional: Default fallback number if city not found
-  // Change this to your main/admin number if you want a fallback
-  const FALLBACK_NUMBER = "whatsapp:+919904545168";  // Your main number (previously ADMIN_WHATSAPP_TO)
+  const FALLBACK_NUMBER = "whatsapp:+919904545168"; // Your main number
 
   /* ============ ROUTING LOGIC ============ */
-  const cityKey = location.trim().toUpperCase();
+  const cityKey = location.trim().toUpperCase().replace(/\s+/g, ''); // Extra safety
   let toNumber = CITY_WHATSAPP_MAP[cityKey];
 
   if (!toNumber) {
-    console.log(`City "${cityKey}" not in map, using fallback number`);
+    console.log(`City "${cityKey}" not found in map → using fallback`);
     toNumber = FALLBACK_NUMBER;
   }
 
-  console.log(`Sending WhatsApp notification for ${cityKey} → ${toNumber}`);
+  console.log(`Sending WhatsApp to: ${toNumber} for city: ${location}`);
 
   const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
   /* ============ SEND WHATSAPP TEMPLATE MESSAGE ============ */
   try {
-    const result = await client.messages.create({
+    // IMPORTANT: Your current approved template has ZERO variables
+    // So we send an EMPTY contentVariables object
+    // If you later create a template with {{1}}, {{2}}, etc., uncomment the block below
+
+    const messagePayload = {
       from: TWILIO_WHATSAPP_FROM,
       to: toNumber,
       contentSid: ADMIN_TEMPLATE_SID,
-      contentVariables: {
-        "1": name.trim(),
-        "2": phone.trim(),
-        "3": location.trim(),
-        "4": preferred_date?.trim() || "Not specified",
-      },
-    });
+      contentVariables: {} // ← Empty because your template is static
+    };
+
+    // === FUTURE: If you create a dynamic template with 4 variables ===
+    // Uncomment this instead:
+    /*
+    messagePayload.contentVariables = {
+      "1": name.trim(),
+      "2": phone.trim(),
+      "3": location.trim(),
+      "4": preferred_date?.trim() || "Not specified",
+    };
+    */
+
+    const result = await client.messages.create(messagePayload);
 
     console.log("WhatsApp message sent successfully:", result.sid);
     return res.status(200).json({
       success: true,
       messageSid: result.sid,
-      sentTo: toNumber  // Optional: for logging/debugging
+      sentTo: toNumber,
+      city: location
     });
 
   } catch (err) {
-    console.error("Twilio error:", err);
+    console.error("Twilio error details:", {
+      message: err.message,
+      code: err.code,
+      status: err.status,
+      moreInfo: err.moreInfo
+    });
 
     return res.status(500).json({
       success: false,
       error: "TWILIO_ERROR",
       details: err.message,
       code: err.code || null,
-      moreInfo: err.moreInfo || null,
     });
   }
 };
