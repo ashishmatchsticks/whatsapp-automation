@@ -26,8 +26,6 @@ module.exports = async (req, res) => {
 
   /* ============ SAFE BODY NORMALIZATION ============ */
   let body = req.body;
-
-  // Handle empty or string body (safe for Vercel, Shopify, Postman, etc.)
   if (!body || typeof body !== "object") {
     try {
       body = JSON.parse(req.body || "{}");
@@ -45,7 +43,7 @@ module.exports = async (req, res) => {
     preferred_date = ""
   } = body;
 
-  /* ============ DETAILED DEBUG LOG (remove in production if desired) ============ */
+  /* ============ DETAILED DEBUG LOG ============ */
   console.log("Extracted values:", {
     name: `'${name}'`,
     phone: `'${phone}'`,
@@ -75,8 +73,6 @@ module.exports = async (req, res) => {
     TWILIO_ACCOUNT_SID,
     TWILIO_AUTH_TOKEN,
     TWILIO_WHATSAPP_FROM,
-    ADMIN_WHATSAPP_TO,
-    MUMBAI_WHATSAPP_TO,
     ADMIN_TEMPLATE_SID,
   } = process.env;
 
@@ -84,7 +80,6 @@ module.exports = async (req, res) => {
     !TWILIO_ACCOUNT_SID ||
     !TWILIO_AUTH_TOKEN ||
     !TWILIO_WHATSAPP_FROM ||
-    !ADMIN_WHATSAPP_TO ||
     !ADMIN_TEMPLATE_SID
   ) {
     console.error("Missing Twilio environment variables");
@@ -94,12 +89,34 @@ module.exports = async (req, res) => {
     });
   }
 
+  /* ============ CITY → WHATSAPP NUMBER MAPPING (Hardcoded as requested) ============ */
+  const CITY_WHATSAPP_MAP = {
+    MUMBAI:      "whatsapp:+919324088075",
+    PUNE:        "whatsapp:+917620577347",
+    DELHI:       "whatsapp:+918448654489",
+    BANGALORE:   "whatsapp:+918511759373",
+    CHANDIGARH:  "whatsapp:+918130324489",
+    JALGAON:     "whatsapp:+919168456666",
+    HYDERABAD:   "whatsapp:+918799655139",
+    AURANGABAD:  "whatsapp:+919112283522",
+    INDORE:      "whatsapp:+918319950609",
+    CHENNAI:     "whatsapp:+918511759373",
+  };
+
+  // Optional: Default fallback number if city not found
+  // Change this to your main/admin number if you want a fallback
+  const FALLBACK_NUMBER = "whatsapp:+919904545168";  // Your main number (previously ADMIN_WHATSAPP_TO)
+
   /* ============ ROUTING LOGIC ============ */
-  const city = location.trim().toUpperCase();
-  const toNumber =
-    city === "MUMBAI" && MUMBAI_WHATSAPP_TO
-      ? MUMBAI_WHATSAPP_TO
-      : ADMIN_WHATSAPP_TO;
+  const cityKey = location.trim().toUpperCase();
+  let toNumber = CITY_WHATSAPP_MAP[cityKey];
+
+  if (!toNumber) {
+    console.log(`City "${cityKey}" not in map, using fallback number`);
+    toNumber = FALLBACK_NUMBER;
+  }
+
+  console.log(`Sending WhatsApp notification for ${cityKey} → ${toNumber}`);
 
   const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
@@ -109,7 +126,6 @@ module.exports = async (req, res) => {
       from: TWILIO_WHATSAPP_FROM,
       to: toNumber,
       contentSid: ADMIN_TEMPLATE_SID,
-      // CRITICAL FIX: Pass contentVariables as OBJECT, not JSON string
       contentVariables: {
         "1": name.trim(),
         "2": phone.trim(),
@@ -119,15 +135,15 @@ module.exports = async (req, res) => {
     });
 
     console.log("WhatsApp message sent successfully:", result.sid);
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
-      messageSid: result.sid 
+      messageSid: result.sid,
+      sentTo: toNumber  // Optional: for logging/debugging
     });
 
   } catch (err) {
     console.error("Twilio error:", err);
 
-    // More helpful error response
     return res.status(500).json({
       success: false,
       error: "TWILIO_ERROR",
