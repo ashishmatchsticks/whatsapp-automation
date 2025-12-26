@@ -24,24 +24,49 @@ module.exports = async (req, res) => {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
-  /* ============ BODY PARSE ============ */
+  /* ============ SAFE BODY NORMALIZATION ============ */
   let body = req.body;
-  if (typeof body === "string") {
+
+  // Handle empty or string body (safe for Vercel, Shopify, Postman, etc.)
+  if (!body || typeof body !== "object") {
     try {
-      body = JSON.parse(body);
-    } catch {
-      return res.status(400).json({ success: false, error: "Invalid JSON" });
+      body = JSON.parse(req.body || "{}");
+    } catch (e) {
+      body = {};
     }
   }
 
-  const { name, phone, location, preferred_date } = body || {};
+  console.log("Incoming payload:", body);
+
+  const {
+    name = "",
+    phone = "",
+    location = "",
+    preferred_date = ""
+  } = body;
+
+  /* ============ DETAILED DEBUG LOG (remove in production if desired) ============ */
+  console.log("Extracted values:", {
+    name: `'${name}'`,
+    phone: `'${phone}'`,
+    location: `'${location}'`,
+    nameTrimmedLength: name.trim().length,
+    phoneTrimmedLength: phone.trim().length,
+    locationTrimmedLength: location.trim().length,
+  });
 
   /* ============ VALIDATION ============ */
-  if (!name || !phone || !location) {
+  if (!name.trim() || !phone.trim() || !location.trim()) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields",
-      required: ["name", "phone", "location"]
+      details: "name, phone, and location are required and cannot be empty/blank",
+      received: body,
+      trimmed: {
+        name: name.trim(),
+        phone: phone.trim(),
+        location: location.trim(),
+      },
     });
   }
 
@@ -52,7 +77,7 @@ module.exports = async (req, res) => {
     TWILIO_WHATSAPP_FROM,
     ADMIN_WHATSAPP_TO,
     MUMBAI_WHATSAPP_TO,
-    ADMIN_TEMPLATE_SID, // SID of admin_lead_alert_v2
+    ADMIN_TEMPLATE_SID,
   } = process.env;
 
   if (
@@ -62,9 +87,10 @@ module.exports = async (req, res) => {
     !ADMIN_WHATSAPP_TO ||
     !ADMIN_TEMPLATE_SID
   ) {
+    console.error("Missing Twilio environment variables");
     return res.status(500).json({
       success: false,
-      error: "SERVER_CONFIG_ERROR"
+      error: "SERVER_CONFIG_ERROR",
     });
   }
 
@@ -77,29 +103,37 @@ module.exports = async (req, res) => {
 
   const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
-  /* ============ SEND WHATSAPP TEMPLATE MESSAGE =========== */
+  /* ============ SEND WHATSAPP TEMPLATE MESSAGE ============ */
   try {
     const result = await client.messages.create({
-      from: TWILIO_WHATSAPP_FROM, // e.g. whatsapp:+919106963751
-      to: toNumber,              // admin WhatsApp number
+      from: TWILIO_WHATSAPP_FROM,
+      to: toNumber,
       contentSid: ADMIN_TEMPLATE_SID,
-      contentVariables: JSON.stringify({
-        "1": name,
-        "2": phone,
-        "3": location,
-        "4": preferred_date || "Not specified"
-      }),
+      // CRITICAL FIX: Pass contentVariables as OBJECT, not JSON string
+      contentVariables: {
+        "1": name.trim(),
+        "2": phone.trim(),
+        "3": location.trim(),
+        "4": preferred_date?.trim() || "Not specified",
+      },
     });
 
-    console.log("WhatsApp sent successfully:", result.sid);
-    return res.status(200).json({ success: true });
+    console.log("WhatsApp message sent successfully:", result.sid);
+    return res.status(200).json({ 
+      success: true,
+      messageSid: result.sid 
+    });
 
   } catch (err) {
-    console.error("Twilio error:", err.message);
+    console.error("Twilio error:", err);
+
+    // More helpful error response
     return res.status(500).json({
       success: false,
       error: "TWILIO_ERROR",
-      details: err.message
+      details: err.message,
+      code: err.code || null,
+      moreInfo: err.moreInfo || null,
     });
   }
 };
