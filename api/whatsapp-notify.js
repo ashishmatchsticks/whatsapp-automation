@@ -1,17 +1,15 @@
 // api/whatsapp-notify.js
-// Sends admin WhatsApp notification using APPROVED WhatsApp template
+// Sends admin WhatsApp notification using APPROVED WhatsApp template (admin_lead_alert_v2)
 
 const twilio = require("twilio");
 
 module.exports = async (req, res) => {
   /* ============ CORS ============ */
-  const defaultOrigin = (process.env.ALLOWED_ORIGIN || "https://amty-global.myshopify.com").replace(/\/$/, "");
-  const requestOrigin = (req.headers.origin || "").replace(/\/$/, "");
+  const allowedOrigin = (process.env.ALLOWED_ORIGIN || "https://amty-global.myshopify.com").replace(/\/$/, "");
+  const origin = (req.headers.origin || "").replace(/\/$/, "");
 
-  if (requestOrigin === defaultOrigin) {
-    res.setHeader("Access-Control-Allow-Origin", defaultOrigin);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", "null");
+  if (origin === allowedOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   }
 
   res.setHeader("Vary", "Origin");
@@ -36,12 +34,14 @@ module.exports = async (req, res) => {
     }
   }
 
-  const { name, phone, location, message, preferred_date } = body || {};
+  const { name, phone, location, preferred_date } = body || {};
 
-  if (!name || !phone || !location || !message) {
+  /* ============ VALIDATION ============ */
+  if (!name || !phone || !location) {
     return res.status(400).json({
       success: false,
       error: "Missing required fields",
+      required: ["name", "phone", "location"]
     });
   }
 
@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
     TWILIO_WHATSAPP_FROM,
     ADMIN_WHATSAPP_TO,
     MUMBAI_WHATSAPP_TO,
-    ADMIN_TEMPLATE_SID, // 👈 REQUIRED
+    ADMIN_TEMPLATE_SID, // SID of admin_lead_alert_v2
   } = process.env;
 
   if (
@@ -64,14 +64,14 @@ module.exports = async (req, res) => {
   ) {
     return res.status(500).json({
       success: false,
-      error: "SERVER_CONFIG_ERROR",
+      error: "SERVER_CONFIG_ERROR"
     });
   }
 
   /* ============ ROUTING LOGIC ============ */
-  const selectedLocation = location.trim().toUpperCase();
+  const city = location.trim().toUpperCase();
   const toNumber =
-    selectedLocation === "MUMBAI" && MUMBAI_WHATSAPP_TO
+    city === "MUMBAI" && MUMBAI_WHATSAPP_TO
       ? MUMBAI_WHATSAPP_TO
       : ADMIN_WHATSAPP_TO;
 
@@ -80,26 +80,26 @@ module.exports = async (req, res) => {
   /* ============ SEND WHATSAPP TEMPLATE MESSAGE ============ */
   try {
     const result = await client.messages.create({
-      from: TWILIO_WHATSAPP_FROM,     // ✅ Your approved sender
-      to: toNumber,                  // ✅ Admin number
+      from: TWILIO_WHATSAPP_FROM, // e.g. whatsapp:+919106963751
+      to: toNumber,              // admin WhatsApp number
       contentSid: ADMIN_TEMPLATE_SID,
       contentVariables: JSON.stringify({
         "1": name,
         "2": phone,
         "3": location,
-        "4": preferred_date || "Not specified",
-        "5": message,
+        "4": preferred_date || "Not specified"
       }),
     });
 
-    console.log("WhatsApp sent:", result.sid);
+    console.log("WhatsApp sent successfully:", result.sid);
     return res.status(200).json({ success: true });
+
   } catch (err) {
     console.error("Twilio error:", err.message);
     return res.status(500).json({
       success: false,
       error: "TWILIO_ERROR",
-      details: err.message,
+      details: err.message
     });
   }
 };
