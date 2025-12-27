@@ -25,24 +25,6 @@ const client = twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 
-// Hardcoded city → WhatsApp number mapping (same as your previous working version)
-const CITY_WHATSAPP_MAP = {
-  MUMBAI:      "whatsapp:+919904545168",
-  PUNE:        "whatsapp:+917620577347",
-  DELHI:       "whatsapp:+918448654489",
-  BANGALORE:   "whatsapp:+918511759373",
-  CHANDIGARH:  "whatsapp:+918130324489",
-  JALGAON:     "whatsapp:+919168456666",
-  HYDERABAD:   "whatsapp:+918799655139",
-  AURANGABAD:  "whatsapp:+919112283522",
-  INDORE:      "whatsapp:+918319950609",
-  CHENNAI:     "whatsapp:+918511759373",
-  ITANAGAR:    "whatsapp:+919904545168", // fallback or correct later
-};
-
-// Fallback number (your main admin number)
-const FALLBACK_WHATSAPP = process.env.ADMIN_WHATSAPP_TO || "whatsapp:+919904545168";
-
 // Route: /api/whatsapp-notify
 app.post("/api/whatsapp-notify", async (req, res) => {
   console.log("Incoming request body:", req.body);
@@ -51,20 +33,21 @@ app.post("/api/whatsapp-notify", async (req, res) => {
     name = "",
     phone = "",
     location = "",
-    preferred_date = ""
+    preferred_date = "",
+    email = "",
+    message = ""
   } = req.body || {};
 
-  // Validation
+  // Validation: required fields
   if (!name.trim() || !phone.trim() || !location.trim()) {
     return res.status(400).json({
       success: false,
-      error: "Missing required fields",
-      details: "name, phone, and location are required",
+      error: "Missing required fields: name, phone, and location are required",
       received: req.body,
     });
   }
 
-  // Required env vars
+  // Config check
   const requiredEnv = [
     "TWILIO_ACCOUNT_SID",
     "TWILIO_AUTH_TOKEN",
@@ -74,48 +57,48 @@ app.post("/api/whatsapp-notify", async (req, res) => {
 
   const missing = requiredEnv.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    console.error("Missing environment variables:", missing);
-    return res.status(500).json({
-      success: false,
-      error: "Server configuration error",
-    });
+    console.error("Missing env vars:", missing);
+    return res.status(500).json({ success: false, error: "Server configuration error" });
   }
 
-  // Determine recipient based on city
-  const cityKey = location.trim().toUpperCase().replace(/\s+/g, '');
-  let toNumber = CITY_WHATSAPP_MAP[cityKey];
+  // City-based routing
+  const city = location.trim().toUpperCase();
 
-  if (!toNumber) {
-    console.log(`City "${location}" (${cityKey}) not found → using fallback`);
-    toNumber = FALLBACK_WHATSAPP;
-  }
+  const CITY_WHATSAPP_MAP = {
+    MUMBAI:      "whatsapp:+919904545168",
+    PUNE:        "whatsapp:+919904545168",
+    DELHI:       "whatsapp:+919904545168",
+    BANGALORE:   "whatsapp:+919904545168",
+    CHANDIGARH:  "whatsapp:+919904545168",
+    JALGAON:     "whatsapp:+919904545168",
+    HYDERABAD:   "whatsapp:+919904545168",
+    AURANGABAD:  "whatsapp:+919904545168",
+    INDORE:      "whatsapp:+919904545168",
+    CHENNAI:     "whatsapp:+919904545168",
+  };
 
-  console.log(`Sending WhatsApp notification to: ${toNumber} (City: ${location})`);
+  const FALLBACK_NUMBER = "whatsapp:+919904545168"; // Your main admin number
+
+  let toNumber = CITY_WHATSAPP_MAP[city] || FALLBACK_NUMBER;
+
+  console.log(`Sending to ${city} → ${toNumber}`);
 
   try {
     const result = await client.messages.create({
       from: process.env.TWILIO_WHATSAPP_FROM,
       to: toNumber,
-      contentSid: process.env.ADMIN_TEMPLATE_SID,
-      // CRITICAL: Your current template has NO variables → send EMPTY object
-      contentVariables: {}
+      contentSid: process.env.ADMIN_TEMPLATE_SID, // HXf52bb56723fb508ac577baa7e637dbd7
+      // REMOVED contentVariables entirely — template has no {{variables}}
     });
 
-    console.log("WhatsApp message sent successfully:", result.sid);
+    console.log("WhatsApp template message sent successfully:", result.sid);
     return res.status(200).json({
       success: true,
       messageSid: result.sid,
       sentTo: toNumber,
-      city: location
     });
-
   } catch (err) {
-    console.error("Twilio send failed:", {
-      message: err.message,
-      code: err.code,
-      status: err.status,
-      moreInfo: err.moreInfo
-    });
+    console.error("Twilio error:", err.message, err.code, err.moreInfo);
 
     return res.status(500).json({
       success: false,
@@ -128,10 +111,10 @@ app.post("/api/whatsapp-notify", async (req, res) => {
 
 // Health check
 app.get("/", (req, res) => {
-  res.json({ status: "ok", message: "AMTY WhatsApp Notify Backend Running" });
+  res.json({ status: "ok", message: "WhatsApp notify backend running" });
 });
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`Backend running on port ${port}`);
 });
